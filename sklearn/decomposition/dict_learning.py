@@ -23,7 +23,7 @@ from ..utils.validation import check_is_fitted
 from ..linear_model import Lasso, orthogonal_mp_gram, LassoLars, Lars
 
 
-def _sparse_encode(X, dictionary, gram, cov=None, algorithm='lasso_lars',
+def _sparse_encode(X, dictionary, gram, cov=None, mod=None, algorithm='lasso_lars',
                    regularization=None, copy_cov=True,
                    init=None, max_iter=1000):
     """Generic sparse coding
@@ -45,6 +45,9 @@ def _sparse_encode(X, dictionary, gram, cov=None, algorithm='lasso_lars',
 
     cov: array, shape=(n_components, n_samples)
         Precomputed covariance, dictionary * X'
+
+    mod: array, shape=(n_components, n_samples)
+        Mean modulation function.
 
     algorithm: {'lasso_lars', 'lasso_cd', 'lars', 'omp', 'threshold'}
         lars: uses the least angle regression method (linear_model.lars_path)
@@ -131,6 +134,11 @@ def _sparse_encode(X, dictionary, gram, cov=None, algorithm='lasso_lars',
         new_code = orthogonal_mp_gram(gram, cov, regularization, None,
                                       row_norms(X, squared=True),
                                       copy_Xy=copy_cov).T
+
+    elif algorithm == 'comp':
+        new_code = orthogonal_mp_gram(gram, cov, regularization, None,
+                                      row_norms(X, squared=True),
+                                      copy_Xy=copy_cov, mod=mod).T
     else:
         raise ValueError('Sparse coding method must be "lasso_lars" '
                          '"lasso_cd",  "lasso", "threshold" or "omp", got %s.'
@@ -140,7 +148,7 @@ def _sparse_encode(X, dictionary, gram, cov=None, algorithm='lasso_lars',
 
 # XXX : could be moved to the linear_model module
 def sparse_encode(X, dictionary, gram=None, cov=None, algorithm='lasso_lars',
-                  n_nonzero_coefs=None, alpha=None, copy_cov=True, init=None,
+                  n_nonzero_coefs=None, mod=None, alpha=None, copy_cov=True, init=None,
                   max_iter=1000, n_jobs=1):
     """Sparse coding
 
@@ -179,6 +187,9 @@ def sparse_encode(X, dictionary, gram=None, cov=None, algorithm='lasso_lars',
         Number of nonzero coefficients to target in each column of the
         solution. This is only used by `algorithm='lars'` and `algorithm='omp'`
         and is overridden by `alpha` in the `omp` case.
+
+    mod: array, shape=(n_components, n_samples)
+        Mean modulation function.
 
     alpha: float, 1. by default
         If `algorithm='lasso_lars'` or `algorithm='lasso_cd'`, `alpha` is the
@@ -226,7 +237,7 @@ def sparse_encode(X, dictionary, gram=None, cov=None, algorithm='lasso_lars',
         copy_cov = False
         cov = np.dot(dictionary, X.T)
 
-    if algorithm in ('lars', 'omp'):
+    if algorithm in ('lars', 'omp', 'comp'):
         regularization = n_nonzero_coefs
         if regularization is None:
             regularization = min(max(n_features / 10, 1), n_components)
@@ -236,7 +247,7 @@ def sparse_encode(X, dictionary, gram=None, cov=None, algorithm='lasso_lars',
             regularization = 1.
 
     if n_jobs == 1 or algorithm == 'threshold':
-        return _sparse_encode(X, dictionary, gram, cov=cov,
+        return _sparse_encode(X, dictionary, gram, cov=cov, mod=mod,
                               algorithm=algorithm,
                               regularization=regularization, copy_cov=copy_cov,
                               init=init, max_iter=max_iter)
@@ -247,7 +258,7 @@ def sparse_encode(X, dictionary, gram=None, cov=None, algorithm='lasso_lars',
 
     code_views = Parallel(n_jobs=n_jobs)(
         delayed(_sparse_encode)(
-            X[this_slice], dictionary, gram, cov[:, this_slice], algorithm,
+            X[this_slice], dictionary, gram, cov[:, this_slice], algorithm, mod=mod,
             regularization=regularization, copy_cov=copy_cov,
             init=init[this_slice] if init is not None else None,
             max_iter=max_iter)
@@ -255,6 +266,40 @@ def sparse_encode(X, dictionary, gram=None, cov=None, algorithm='lasso_lars',
     for this_slice, this_view in zip(slices, code_views):
         code[this_slice] = this_view
     return code
+
+def _update_mod(mod, dictionary, X, gain_rate, verbose=False):
+    """Update the estimated modulation function in place.
+
+    Parameters
+    ----------
+    mod: array of shape (n_samples, n_components) 
+        Value of the modulation function at the previous iteration.
+
+    dictionary: array of shape (n_components, n_features)
+        The dictionary matrix against which to solve the sparse coding of
+        the data. Some of the algorithms assume normalized rows for meaningful
+        output.
+
+    X: array of shape (n_samples, n_features)
+        Data matrix.
+
+    gain_rate: float
+        Gives the learning parameter for the mod.
+
+    verbose:
+        Degree of output the procedure will print.
+
+    Returns
+    -------
+    mod: array of shape (n_samples, n_components) 
+        Updated value of the modulation function. 
+
+    """
+    if gain_rate>0.:
+        coef = np.dot(dictionary, X.T).T
+        mod_ = -np.sort(-np.abs(coef), axis=0)
+        mod = (1 - gain_rate)*mod + gain_rate * mod_
+    return mod
 
 def _update_gain(gain, code, gain_rate, verbose=False):
     """Update the estimated variance of coefficients in place.
@@ -330,6 +375,8 @@ def _update_dict(dictionary, Y, code, gain, gain_rate, verbose=False, return_r2=
     # Update gain
     gain = _update_gain(gain, code, gain_rate, verbose=verbose)
 #     if verbose>10: print("Function update dict ", gain)
+    if gain_rate>0.:
+        mod = np.dot(np.linspace(1., 0, n_samples, endpoint=True)[:, np.newaxis], np.ones((1, n_components)))
 
     # Residuals, computed 'in-place' for efficiency
     R = -np.dot(dictionary, code)
@@ -351,7 +398,7 @@ def _update_dict(dictionary, Y, code, gain, gain_rate, verbose=False, return_r2=
             dictionary[:, k] = random_state.randn(n_samples)
             # Setting corresponding coefs to 0
             code[k, :] = 0.0
-            # DICTIONARY NORMALIZATION : norm = 1, as it is for a new random vector <<<<<
+            # DICTIONARY NORMALIZATION : norm = 1, as it is for a new random vector
             dictionary[:, k] /= sqrt(np.dot(dictionary[:, k],
                                             dictionary[:, k]))
         else:
@@ -489,6 +536,11 @@ def dict_learning(X, n_components, alpha, max_iter=100, tol=1e-8, gain_rate=0.,
                            np.zeros((n_components - r, dictionary.shape[1]))]
 
     gain = np.ones(n_components)
+    if method=='comp':
+        mod = np.dot(np.linspace(1., 0, n_components, endpoint=True).T, np.ones((n_samples, 1)))
+    else:
+        mod = None
+
     # Fortran-order dict, as we are going to access its row vectors
     dictionary = np.array(dictionary, order='F')
 
@@ -513,8 +565,11 @@ def dict_learning(X, n_components, alpha, max_iter=100, tol=1e-8, gain_rate=0.,
                    "(elapsed time: % 3is, % 4.1fmn, current cost % 7.3f)"
                    % (ii, dt, dt / 60, current_cost))
 
+        # Update mod
+        if method=='comp': mod = _update_mod(mod, dictionary.T, X.T, gain_rate, verbose=verbose)
+
         # Update code
-        code = sparse_encode(X, dictionary, algorithm=method, alpha=alpha,
+        code = sparse_encode(X, dictionary, algorithm=method, mod=mod, alpha=alpha,
                              init=code, n_jobs=n_jobs)
 
         # Update dictionary
@@ -687,6 +742,10 @@ def dict_learning_online(X, n_components=2, alpha=1, n_iter=100, gain_rate=0.,
     if verbose == 1:
         print('[dict_learning]', end=' ')
     gain = np.ones(n_components)
+    if method=='comp':
+        mod = np.dot(np.linspace(1., 0, n_components, endpoint=True).T, np.ones((n_samples, 1)))
+    else:
+        mod = None
 
     n_batches = floor(float(len(X)) / batch_size)
     if shuffle:
@@ -720,8 +779,11 @@ def dict_learning_online(X, n_components=2, alpha=1, n_iter=100, gain_rate=0.,
                        % (ii, dt, dt / 60))
                 print("Gain ", gain)
 
+        # Update mod
+        if method=='comp': mod = _update_mod(mod, dictionary.T, this_X, gain_rate, verbose=verbose)
+
         this_code = sparse_encode(this_X, dictionary.T, algorithm=method,
-                                  alpha=alpha, n_jobs=n_jobs).T
+                                  mod=mod, alpha=alpha, n_jobs=n_jobs).T
 
         # Update the auxiliary variables
         if ii < batch_size - 1:
@@ -736,8 +798,9 @@ def dict_learning_online(X, n_components=2, alpha=1, n_iter=100, gain_rate=0.,
         B += np.dot(this_X.T, this_code.T)
 
         # Update dictionary/
-        dictionary, gain = _update_dict(dictionary, B, A, gain, gain_rate, verbose=verbose,
-                                  random_state=random_state)
+        dictionary, gain = _update_dict(dictionary, B, A, 
+                                        gain, gain_rate,
+                                        verbose=verbose, random_state=random_state)
         # XXX: Can the residuals be of any use?
 
         # Maybe we need a stopping criteria based on the amount of
@@ -755,8 +818,8 @@ def dict_learning_online(X, n_components=2, alpha=1, n_iter=100, gain_rate=0.,
             print('Learning code...', end=' ')
         elif verbose == 1:
             print('|', end=' ')
-        code = sparse_encode(X, dictionary.T, algorithm=method, alpha=alpha,
-                             n_jobs=n_jobs)
+        code = sparse_encode(X, dictionary.T, algorithm=method, 
+                            mod=mod, alpha=alpha, n_jobs=n_jobs)
         if verbose > 1:
             dt = (time.time() - t0)
             print('done (total time: % 3is, % 4.1fmn)' % (dt, dt / 60))
@@ -1101,7 +1164,7 @@ class MiniBatchDictionaryLearning(BaseEstimator, SparseCodingMixin):
         Lasso solution (linear_model.Lasso). Lars will be faster if
         the estimated components are sparse.
 
-    transform_algorithm : {'lasso_lars', 'lasso_cd', 'lars', 'omp', \
+    transform_algorithm : {'lasso_lars', 'lasso_cd', 'lars', 'omp', 'comp', \
     'threshold'}
         Algorithm used to transform the data.
         lars: uses the least angle regression method (linear_model.lars_path)
@@ -1110,6 +1173,7 @@ class MiniBatchDictionaryLearning(BaseEstimator, SparseCodingMixin):
         Lasso solution (linear_model.Lasso). lasso_lars will be faster if
         the estimated components are sparse.
         omp: uses orthogonal matching pursuit to estimate the sparse solution
+        comp: uses omp with homeostasis
         threshold: squashes to zero all coefficients less than alpha from
         the projection dictionary * X'
 

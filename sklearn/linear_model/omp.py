@@ -141,7 +141,7 @@ def _cholesky_omp(X, y, n_nonzero_coefs, tol=None, copy_X=True,
         return gamma, indices[:n_active], n_active
 
 
-def _gram_omp(Gram, Xy, n_nonzero_coefs, tol_0=None, tol=None,
+def _gram_omp(Gram, Xy, n_nonzero_coefs, mod=None, tol_0=None, tol=None,
               copy_Gram=True, copy_Xy=True, return_path=False):
     """Orthogonal Matching Pursuit step on a precomputed Gram matrix.
 
@@ -157,6 +157,9 @@ def _gram_omp(Gram, Xy, n_nonzero_coefs, tol_0=None, tol=None,
 
     n_nonzero_coefs : int
         Targeted number of non-zero elements
+
+    mod: array, shape=(n_components, n_samples)
+        Mean modulation function.
 
     tol_0 : float
         Squared norm of y, required if tol is not None.
@@ -216,8 +219,16 @@ def _gram_omp(Gram, Xy, n_nonzero_coefs, tol_0=None, tol=None,
     if return_path:
         coefs = np.empty_like(L)
 
+    if mod is not None: 
+        n_components, n_samples = mod.shape
+        z = np.empty(n_components)
     while True:
-        lam = np.argmax(np.abs(alpha))
+        if mod is None:
+            lam = np.argmax(np.abs(alpha))
+        else:
+            for k in range(n_components):
+                z[k] = np.interp(-np.abs(alpha[k]), -mod[:, k], np.linspace(0, 1., n_samples, endpoint=True))
+            lam = np.argmax(z)
         if lam < n_active or alpha[lam] ** 2 < min_float:
             # selected same atom twice, or inner product too small
             warnings.warn(premature, RuntimeWarning, stacklevel=3)
@@ -402,7 +413,7 @@ def orthogonal_mp(X, y, n_nonzero_coefs=None, tol=None, precompute=False,
 
 def orthogonal_mp_gram(Gram, Xy, n_nonzero_coefs=None, tol=None,
                        norms_squared=None, copy_Gram=True,
-                       copy_Xy=True, return_path=False,
+                       copy_Xy=True, mod=None, return_path=False,
                        return_n_iter=False):
     """Gram Orthogonal Matching Pursuit (OMP)
 
@@ -415,7 +426,7 @@ def orthogonal_mp_gram(Gram, Xy, n_nonzero_coefs=None, tol=None,
         Gram matrix of the input data: X.T * X
 
     Xy : array, shape (n_features,) or (n_features, n_targets)
-        Input targets multiplied by X: X.T * y
+        Input targets y multiplied by X: X.T * y
 
     n_nonzero_coefs : int
         Desired number of non-zero entries in the solution. If None (by
@@ -435,6 +446,9 @@ def orthogonal_mp_gram(Gram, Xy, n_nonzero_coefs=None, tol=None,
     copy_Xy : bool, optional
         Whether the covariance vector Xy must be copied by the algorithm.
         If False, it may be overwritten.
+
+    mod: array, shape=(n_components, n_samples)
+        Mean modulation function.
 
     return_path : bool, optional. Default: False
         Whether to return every value of the nonzero coefficients along the
@@ -507,7 +521,7 @@ def orthogonal_mp_gram(Gram, Xy, n_nonzero_coefs=None, tol=None,
     n_iters = []
     for k in range(Xy.shape[1]):
         out = _gram_omp(
-            Gram, Xy[:, k], n_nonzero_coefs,
+            Gram, Xy[:, k], n_nonzero_coefs, mod,
             norms_squared[k] if tol is not None else None, tol,
             copy_Gram=copy_Gram, copy_Xy=copy_Xy,
             return_path=return_path)
