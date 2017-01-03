@@ -21,7 +21,7 @@ from ..utils.extmath import pinvh
 from ..utils.validation import check_random_state, check_array
 from ..linear_model import lars_path
 from ..linear_model import cd_fast
-from ..cross_validation import check_cv, cross_val_score
+from ..model_selection import check_cv, cross_val_score
 from ..externals.joblib import Parallel, delayed
 import collections
 
@@ -461,24 +461,25 @@ class GraphLassoCV(GraphLasso):
         grid to be used. See the notes in the class docstring for
         more details.
 
-    n_refinements: strictly positive integer
+    n_refinements : strictly positive integer
         The number of times the grid is refined. Not used if explicit
         values of alphas are passed.
 
     cv : int, cross-validation generator or an iterable, optional
         Determines the cross-validation splitting strategy.
         Possible inputs for cv are:
-          - None, to use the default 3-fold cross-validation,
-          - integer, to specify the number of folds.
-          - An object to be used as a cross-validation generator.
-          - An iterable yielding train/test splits.
+
+        - None, to use the default 3-fold cross-validation,
+        - integer, to specify the number of folds.
+        - An object to be used as a cross-validation generator.
+        - An iterable yielding train/test splits.
 
         For integer/None inputs :class:`KFold` is used.
 
         Refer :ref:`User Guide <cross_validation>` for the various
         cross-validation strategies that can be used here.
 
-    tol: positive float, optional
+    tol : positive float, optional
         The tolerance to declare convergence: if the dual gap goes below
         this value, iterations are stopped.
 
@@ -488,19 +489,19 @@ class GraphLassoCV(GraphLasso):
         for a given column update, not of the overall parameter estimate. Only
         used for mode='cd'.
 
-    max_iter: integer, optional
+    max_iter : integer, optional
         Maximum number of iterations.
 
-    mode: {'cd', 'lars'}
+    mode : {'cd', 'lars'}
         The Lasso solver to use: coordinate descent or LARS. Use LARS for
         very sparse underlying graphs, where number of features is greater
         than number of samples. Elsewhere prefer cd which is more numerically
         stable.
 
-    n_jobs: int, optional
+    n_jobs : int, optional
         number of jobs to run in parallel (default 1).
 
-    verbose: boolean, optional
+    verbose : boolean, optional
         If verbose is True, the objective function and duality gap are
         printed at each iteration.
 
@@ -580,7 +581,7 @@ class GraphLassoCV(GraphLasso):
         emp_cov = empirical_covariance(
             X, assume_centered=self.assume_centered)
 
-        cv = check_cv(self.cv, X, y, classifier=False)
+        cv = check_cv(self.cv, y, classifier=False)
 
         # List of (alpha, scores, covs)
         path = list()
@@ -612,14 +613,13 @@ class GraphLassoCV(GraphLasso):
                 this_path = Parallel(
                     n_jobs=self.n_jobs,
                     verbose=self.verbose
-                )(
-                    delayed(graph_lasso_path)(
-                        X[train], alphas=alphas,
-                        X_test=X[test], mode=self.mode,
-                        tol=self.tol, enet_tol=self.enet_tol,
-                        max_iter=int(.1 * self.max_iter),
-                        verbose=inner_verbose)
-                    for train, test in cv)
+                )(delayed(graph_lasso_path)(X[train], alphas=alphas,
+                                            X_test=X[test], mode=self.mode,
+                                            tol=self.tol,
+                                            enet_tol=self.enet_tol,
+                                            max_iter=int(.1 * self.max_iter),
+                                            verbose=inner_verbose)
+                  for train, test in cv.split(X, y))
 
             # Little danse to transform the list in what we need
             covs, _, scores = zip(*this_path)

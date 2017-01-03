@@ -51,13 +51,15 @@ def fetch_rcv1(data_home=None, subset='all', download_if_missing=True,
 
     Read more in the :ref:`User Guide <datasets>`.
 
+    .. versionadded:: 0.17
+
     Parameters
     ----------
     data_home : string, optional
         Specify another download and cache folder for the datasets. By default
         all scikit learn data is stored in '~/scikit_learn_data' subfolders.
 
-    subset: string, 'train', 'test', or 'all', default='all'
+    subset : string, 'train', 'test', or 'all', default='all'
         Select the dataset to load: 'train' for the training set
         (23149 samples), 'test' for the test set (781265 samples),
         'all' for both, with the training samples first if shuffle is False.

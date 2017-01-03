@@ -45,6 +45,8 @@ class _BinaryGaussianProcessClassifierLaplace(BaseEstimator):
     Currently, the implementation is restricted to using the logistic link
     function.
 
+    .. versionadded:: 0.18
+
     Parameters
     ----------
     kernel : kernel object
@@ -114,30 +116,31 @@ class _BinaryGaussianProcessClassifierLaplace(BaseEstimator):
     X_train_ : array-like, shape = (n_samples, n_features)
         Feature values in training data (also required for prediction)
 
-    y_train_: array-like, shape = (n_samples,)
+    y_train_ : array-like, shape = (n_samples,)
         Target values in training data (also required for prediction)
 
     classes_ : array-like, shape = (n_classes,)
         Unique class labels.
 
-    kernel_: kernel object
+    kernel_ : kernel object
         The kernel used for prediction. The structure of the kernel is the
         same as the one passed as parameter but with optimized hyperparameters
 
-    L_: array-like, shape = (n_samples, n_samples)
+    L_ : array-like, shape = (n_samples, n_samples)
         Lower-triangular Cholesky decomposition of the kernel in X_train_
 
-    pi_: array-like, shape = (n_samples,)
+    pi_ : array-like, shape = (n_samples,)
         The probabilities of the positive class for the training points
         X_train_
 
-    W_sr_: array-like, shape = (n_samples,)
+    W_sr_ : array-like, shape = (n_samples,)
         Square root of W, the Hessian of log-likelihood of the latent function
         values for the observed labels. Since W is diagonal, only the diagonal
         of sqrt(W) is stored.
 
-    log_marginal_likelihood_value_: float
-        The log-marginal-likelihood of self.kernel_.theta
+    log_marginal_likelihood_value_ : float
+        The log-marginal-likelihood of ``self.kernel_.theta``
+
     """
     def __init__(self, kernel=None, optimizer="fmin_l_bfgs_b",
                  n_restarts_optimizer=0, max_iter_predict=100,
@@ -246,7 +249,7 @@ class _BinaryGaussianProcessClassifierLaplace(BaseEstimator):
         Returns
         -------
         C : array, shape = (n_samples,)
-            Predicted target values for X, values are from classes_
+            Predicted target values for X, values are from ``classes_``
         """
         check_is_fitted(self, ["X_train_", "y_train_", "pi_", "W_sr_", "L_"])
 
@@ -270,7 +273,7 @@ class _BinaryGaussianProcessClassifierLaplace(BaseEstimator):
         C : array-like, shape = (n_samples, n_classes)
             Returns the probability of the samples for each class in
             the model. The columns correspond to the classes in sorted
-            order, as they appear in the attribute `classes_`.
+            order, as they appear in the attribute ``classes_``.
         """
         check_is_fitted(self, ["X_train_", "y_train_", "pi_", "W_sr_", "L_"])
 
@@ -305,7 +308,7 @@ class _BinaryGaussianProcessClassifierLaplace(BaseEstimator):
         theta : array-like, shape = (n_kernel_params,) or None
             Kernel hyperparameters for which the log-marginal likelihood is
             evaluated. If None, the precomputed log_marginal_likelihood
-            of self.kernel_.theta is returned.
+            of ``self.kernel_.theta`` is returned.
 
         eval_gradient : bool, default: False
             If True, the gradient of the log-marginal likelihood with respect
@@ -437,7 +440,7 @@ class GaussianProcessClassifier(BaseEstimator, ClassifierMixin):
     """Gaussian process classification (GPC) based on Laplace approximation.
 
     The implementation is based on Algorithm 3.1, 3.2, and 5.1 of
-    ``Gaussian Processes for Machine Learning'' (GPML) by Rasmussen and
+    Gaussian Processes for Machine Learning (GPML) by Rasmussen and
     Williams.
 
     Internally, the Laplace approximation is used for approximating the
@@ -480,7 +483,7 @@ class GaussianProcessClassifier(BaseEstimator, ClassifierMixin):
 
             'fmin_l_bfgs_b'
 
-    n_restarts_optimizer: int, optional (default: 0)
+    n_restarts_optimizer : int, optional (default: 0)
         The number of restarts of the optimizer for finding the kernel's
         parameters which maximize the log-marginal likelihood. The first run
         of the optimizer is performed from the kernel's initial parameters,
@@ -489,7 +492,7 @@ class GaussianProcessClassifier(BaseEstimator, ClassifierMixin):
         must be finite. Note that n_restarts_optimizer=0 implies that one
         run is performed.
 
-    max_iter_predict: int, optional (default: 100)
+    max_iter_predict : int, optional (default: 100)
         The maximum number of iterations in Newton's method for approximating
         the posterior during predict. Smaller values will reduce computation
         time at the cost of worse results.
@@ -512,7 +515,7 @@ class GaussianProcessClassifier(BaseEstimator, ClassifierMixin):
         given, it fixes the seed. Defaults to the global numpy random
         number generator.
 
-    multi_class: string, default: "one_vs_rest"
+    multi_class : string, default : "one_vs_rest"
         Specifies how multi-class classification problems are handled.
         Supported are "one_vs_rest" and "one_vs_one". In "one_vs_rest",
         one binary Gaussian process classifier is fitted for each class, which
@@ -538,14 +541,16 @@ class GaussianProcessClassifier(BaseEstimator, ClassifierMixin):
         classification, a CompoundKernel is returned which consists of the
         different kernels used in the one-versus-rest classifiers.
 
-    log_marginal_likelihood_value_: float
-        The log-marginal-likelihood of self.kernel_.theta
+    log_marginal_likelihood_value_ : float
+        The log-marginal-likelihood of ``self.kernel_.theta``
 
     classes_ : array-like, shape = (n_classes,)
         Unique class labels.
 
     n_classes_ : int
         The number of classes in the training data
+
+    .. versionadded:: 0.18
     """
     def __init__(self, kernel=None, optimizer="fmin_l_bfgs_b",
                  n_restarts_optimizer=0, max_iter_predict=100,
@@ -624,7 +629,7 @@ class GaussianProcessClassifier(BaseEstimator, ClassifierMixin):
         Returns
         -------
         C : array, shape = (n_samples,)
-            Predicted target values for X, values are from classes_
+            Predicted target values for X, values are from ``classes_``
         """
         check_is_fitted(self, ["classes_", "n_classes_"])
         X = check_array(X)
@@ -675,7 +680,7 @@ class GaussianProcessClassifier(BaseEstimator, ClassifierMixin):
             be the  hyperparameters of the compound kernel or of an individual
             kernel. In the latter case, all individual kernel get assigned the
             same theta values. If None, the precomputed log_marginal_likelihood
-            of self.kernel_.theta is returned.
+            of ``self.kernel_.theta`` is returned.
 
         eval_gradient : bool, default: False
             If True, the gradient of the log-marginal likelihood with respect
@@ -708,7 +713,7 @@ class GaussianProcessClassifier(BaseEstimator, ClassifierMixin):
         else:
             if eval_gradient:
                 raise NotImplementedError(
-                    "Gradient of log-marginal-likelhood not implemented for "
+                    "Gradient of log-marginal-likelihood not implemented for "
                     "multi-class GPC.")
             estimators = self.base_estimator_.estimators_
             n_dims = estimators[0].kernel_.n_dims
@@ -720,7 +725,7 @@ class GaussianProcessClassifier(BaseEstimator, ClassifierMixin):
                 # theta for compound kernel
                 return np.mean(
                     [estimator.log_marginal_likelihood(
-                        theta[n_dims*i:n_dims*(i+1)])
+                        theta[n_dims * i:n_dims * (i + 1)])
                      for i, estimator in enumerate(estimators)])
             else:
                 raise ValueError("Shape of theta must be either %d or %d. "

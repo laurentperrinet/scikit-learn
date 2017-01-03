@@ -66,13 +66,16 @@ WhiteKernel component into the kernel, which can estimate the global noise
 level from the data (see example below).
 
 The implementation is based on Algorithm 2.1 of [RW2006]_. In addition to
-the API of standard sklearn estimators, GaussianProcessRegressor:
-     * allows prediction without prior fitting (based on the GP prior)
-     * provides an additional method ``sample_y(X)``, which evaluates samples
-       drawn from the GPR (prior or posterior) at given inputs
-     * exposes a method ``log_marginal_likelihood(theta)``, which can be used
-       externally for other ways of selecting hyperparameters, e.g., via
-       Markov chain Monte Carlo.
+the API of standard scikit-learn estimators, GaussianProcessRegressor:
+
+* allows prediction without prior fitting (based on the GP prior)
+
+* provides an additional method ``sample_y(X)``, which evaluates samples
+  drawn from the GPR (prior or posterior) at given inputs
+
+* exposes a method ``log_marginal_likelihood(theta)``, which can be used
+  externally for other ways of selecting hyperparameters, e.g., via
+  Markov chain Monte Carlo.
 
 
 GPR examples
@@ -85,14 +88,14 @@ estimate the noise level of data. An illustration of the
 log-marginal-likelihood (LML) landscape shows that there exist two local
 maxima of LML.
 
-.. figure:: ../auto_examples/gaussian_process/images/plot_gpr_noisy_000.png
+.. figure:: ../auto_examples/gaussian_process/images/sphx_glr_plot_gpr_noisy_000.png
    :target: ../auto_examples/gaussian_process/plot_gpr_noisy.html
    :align: center
 
 The first corresponds to a model with a high noise level and a
 large length scale, which explains all variations in the data by noise.
 
-.. figure:: ../auto_examples/gaussian_process/images/plot_gpr_noisy_001.png
+.. figure:: ../auto_examples/gaussian_process/images/sphx_glr_plot_gpr_noisy_001.png
    :target: ../auto_examples/gaussian_process/plot_gpr_noisy.html
    :align: center
 
@@ -103,7 +106,7 @@ hyperparameters, the gradient-based optimization might also converge to the
 high-noise solution. It is thus important to repeat the optimization several
 times for different initializations.
 
-.. figure:: ../auto_examples/gaussian_process/images/plot_gpr_noisy_002.png
+.. figure:: ../auto_examples/gaussian_process/images/sphx_glr_plot_gpr_noisy_002.png
    :target: ../auto_examples/gaussian_process/plot_gpr_noisy.html
    :align: center
 
@@ -139,7 +142,7 @@ Moreover, the noise level
 of the data is learned explicitly by GPR by an additional WhiteKernel component
 in the kernel and by the regularization parameter alpha of KRR.
 
-.. figure:: ../auto_examples/gaussian_process/images/plot_compare_gpr_krr_001.png
+.. figure:: ../auto_examples/gaussian_process/images/sphx_glr_plot_compare_gpr_krr_001.png
    :target: ../auto_examples/gaussian_process/plot_compare_gpr_krr.html
    :align: center
 
@@ -161,8 +164,8 @@ than just predicting the mean.
 GPR on Mauna Loa CO2 data
 -------------------------
 
-This example is based on Section 5.4.3 of "Gaussian Processes for Machine
-Learning" [RW2006]_. It illustrates an example of complex kernel engineering and
+This example is based on Section 5.4.3 of [RW2006]_.
+It illustrates an example of complex kernel engineering and
 hyperparameter optimization using gradient ascent on the
 log-marginal-likelihood. The data consists of the monthly average atmospheric
 CO2 concentrations (in parts per million by volume (ppmv)) collected at the
@@ -171,26 +174,30 @@ model the CO2 concentration as a function of the time t.
 
 The kernel is composed of several terms that are responsible for explaining
 different properties of the signal:
- - a long term, smooth rising trend is to be explained by an RBF kernel. The
-   RBF kernel with a large length-scale enforces this component to be smooth;
-   it is not enforced that the trend is rising which leaves this choice to the
-   GP. The specific length-scale and the amplitude are free hyperparameters.
- - a seasonal component, which is to be explained by the periodic
-   ExpSineSquared kernel with a fixed periodicity of 1 year. The length-scale
-   of this periodic component, controlling its smoothness, is a free parameter.
-   In order to allow decaying away from exact periodicity, the product with an
-   RBF kernel is taken. The length-scale of this RBF component controls the
-   decay time and is a further free parameter.
- - smaller, medium term irregularities are to be explained by a
-   RationalQuadratic kernel component, whose length-scale and alpha parameter,
-   which determines the diffuseness of the length-scales, are to be determined.
-   According to [RW2006]_, these irregularities can better be explained by
-   a RationalQuadratic than an RBF kernel component, probably because it can
-   accommodate several length-scales.
- - a "noise" term, consisting of an RBF kernel contribution, which shall
-   explain the correlated noise components such as local weather phenomena,
-   and a WhiteKernel contribution for the white noise. The relative amplitudes
-   and the RBF's length scale are further free parameters.
+
+- a long term, smooth rising trend is to be explained by an RBF kernel. The
+  RBF kernel with a large length-scale enforces this component to be smooth;
+  it is not enforced that the trend is rising which leaves this choice to the
+  GP. The specific length-scale and the amplitude are free hyperparameters.
+
+- a seasonal component, which is to be explained by the periodic
+  ExpSineSquared kernel with a fixed periodicity of 1 year. The length-scale
+  of this periodic component, controlling its smoothness, is a free parameter.
+  In order to allow decaying away from exact periodicity, the product with an
+  RBF kernel is taken. The length-scale of this RBF component controls the
+  decay time and is a further free parameter.
+
+- smaller, medium term irregularities are to be explained by a
+  RationalQuadratic kernel component, whose length-scale and alpha parameter,
+  which determines the diffuseness of the length-scales, are to be determined.
+  According to [RW2006]_, these irregularities can better be explained by
+  a RationalQuadratic than an RBF kernel component, probably because it can
+  accommodate several length-scales.
+
+- a "noise" term, consisting of an RBF kernel contribution, which shall
+  explain the correlated noise components such as local weather phenomena,
+  and a WhiteKernel contribution for the white noise. The relative amplitudes
+  and the RBF's length scale are further free parameters.
 
 Maximizing the log-marginal-likelihood after subtracting the target's mean
 yields the following kernel with an LML of -83.214:
@@ -213,7 +220,7 @@ overall noise level is very small, indicating that the data can be very well
 explained by the model. The figure shows also that the model makes very
 confident predictions until around 2015
 
-.. figure:: ../auto_examples/gaussian_process/images/plot_gpr_co2_001.png
+.. figure:: ../auto_examples/gaussian_process/images/sphx_glr_plot_gpr_co2_001.png
    :target: ../auto_examples/gaussian_process/plot_gpr_co2.html
    :align: center
 
@@ -299,11 +306,11 @@ The second figure shows the log-marginal-likelihood for different choices of
 the kernel's hyperparameters, highlighting the two choices of the
 hyperparameters used in the first figure by black dots.
 
-.. figure:: ../auto_examples/gaussian_process/images/plot_gpc_000.png
+.. figure:: ../auto_examples/gaussian_process/images/sphx_glr_plot_gpc_000.png
    :target: ../auto_examples/gaussian_process/plot_gpc.html
    :align: center
 
-.. figure:: ../auto_examples/gaussian_process/images/plot_gpc_001.png
+.. figure:: ../auto_examples/gaussian_process/images/sphx_glr_plot_gpc_001.png
    :target: ../auto_examples/gaussian_process/plot_gpc.html
    :align: center
 
@@ -319,7 +326,7 @@ dataset, the `DotProduct` kernel obtains considerably better results because the
 class-boundaries are linear and coincide with the coordinate axes. In practice,
 however, stationary kernels such as :class:`RBF` often obtain better results.
 
-.. figure:: ../auto_examples/gaussian_process/images/plot_gpc_xor_001.png
+.. figure:: ../auto_examples/gaussian_process/images/sphx_glr_plot_gpc_xor_001.png
    :target: ../auto_examples/gaussian_process/plot_gpc_xor.html
    :align: center
 
@@ -335,7 +342,7 @@ This illustrates the applicability of GPC to non-binary classification.
 The anisotropic RBF kernel obtains slightly higher log-marginal-likelihood by
 assigning different length-scales to the two feature dimensions.
 
-.. figure:: ../auto_examples/gaussian_process/images/plot_gpc_iris_001.png
+.. figure:: ../auto_examples/gaussian_process/images/sphx_glr_plot_gpc_iris_001.png
    :target: ../auto_examples/gaussian_process/plot_gpc_iris.html
    :align: center
 
@@ -486,7 +493,7 @@ kernel as covariance function have mean square derivatives of all orders, and ar
 very smooth. The prior and posterior of a GP resulting from an RBF kernel are shown in
 the following figure:
 
-.. figure:: ../auto_examples/gaussian_process/images/plot_gpr_prior_posterior_000.png
+.. figure:: ../auto_examples/gaussian_process/images/sphx_glr_plot_gpr_prior_posterior_000.png
    :target: ../auto_examples/gaussian_process/plot_gpr_prior_posterior.html
    :align: center
 
@@ -527,7 +534,7 @@ allows adapting to the properties of the true underlying functional relation.
 The prior and posterior of a GP resulting from a Matérn kernel are shown in
 the following figure:
 
-.. figure:: ../auto_examples/gaussian_process/images/plot_gpr_prior_posterior_004.png
+.. figure:: ../auto_examples/gaussian_process/images/sphx_glr_plot_gpr_prior_posterior_004.png
    :target: ../auto_examples/gaussian_process/plot_gpr_prior_posterior.html
    :align: center
 
@@ -549,7 +556,7 @@ The kernel is given by:
 The prior and posterior of a GP resulting from an RBF kernel are shown in
 the following figure:
 
-.. figure:: ../auto_examples/gaussian_process/images/plot_gpr_prior_posterior_001.png
+.. figure:: ../auto_examples/gaussian_process/images/sphx_glr_plot_gpr_prior_posterior_001.png
    :target: ../auto_examples/gaussian_process/plot_gpr_prior_posterior.html
    :align: center
 
@@ -567,7 +574,7 @@ The kernel is given by:
 The prior and posterior of a GP resulting from an ExpSineSquared kernel are shown in
 the following figure:
 
-.. figure:: ../auto_examples/gaussian_process/images/plot_gpr_prior_posterior_002.png
+.. figure:: ../auto_examples/gaussian_process/images/sphx_glr_plot_gpr_prior_posterior_002.png
    :target: ../auto_examples/gaussian_process/plot_gpr_prior_posterior.html
    :align: center
 
@@ -587,19 +594,31 @@ is called the homogeneous linear kernel, otherwise it is inhomogeneous. The kern
 The :class:`DotProduct` kernel is commonly combined with exponentiation. An example with exponent 2 is
 shown in the following figure:
 
-.. figure:: ../auto_examples/gaussian_process/images/plot_gpr_prior_posterior_003.png
+.. figure:: ../auto_examples/gaussian_process/images/sphx_glr_plot_gpr_prior_posterior_003.png
    :target: ../auto_examples/gaussian_process/plot_gpr_prior_posterior.html
    :align: center
 
+References
+----------
+
+    * `[RW2006]
+      <http://www.gaussianprocess.org/gpml/chapters/>`_
+      **Gaussian Processes for Machine Learning**,
+      Carl Eduard Rasmussen and Christopher K.I. Williams, MIT Press 2006.
+      Link to an official complete PDF version of the book
+      `here <http://www.gaussianprocess.org/gpml/chapters/RW.pdf>`_ .
 
 .. currentmodule:: sklearn.gaussian_process
+
+
+
 
 Legacy Gaussian Processes
 =========================
 
-In this section, the implementation of Gaussian processes used in sklearn until
-release 0.16.1 is described. Note that this implementation is deprecated and
-will be removed in version 0.18.
+In this section, the implementation of Gaussian processes used in scikit-learn
+until release 0.16.1 is described. Note that this implementation is deprecated
+and will be removed in version 0.18.
 
 An introductory regression example
 ----------------------------------
@@ -868,7 +887,7 @@ toolbox.
 .. topic:: References:
 
     * `DACE, A Matlab Kriging Toolbox
-      <http://www2.imm.dtu.dk/~hbn/dace/>`_ S Lophaven, HB Nielsen, J
+      <http://imedea.uib-csic.es/master/cambioglobal/Modulo_V_cod101615/Lab/lab_maps/krigging/DACE-krigingsoft/dace/dace.pdf>`_ S Lophaven, HB Nielsen, J
       Sondergaard 2002,
 
     * W.J. Welch, R.J. Buck, J. Sacks, H.P. Wynn, T.J. Mitchell, and M.D.

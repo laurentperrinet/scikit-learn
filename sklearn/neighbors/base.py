@@ -2,7 +2,7 @@
 # Authors: Jake Vanderplas <vanderplas@astro.washington.edu>
 #          Fabian Pedregosa <fabian.pedregosa@inria.fr>
 #          Alexandre Gramfort <alexandre.gramfort@inria.fr>
-#          Sparseness support by Lars Buitinck <L.J.Buitinck@uva.nl>
+#          Sparseness support by Lars Buitinck
 #          Multi-output support by Arnaud Joly <a.joly@ulg.ac.be>
 #
 # License: BSD 3 clause (C) INRIA, University of Amsterdam
@@ -60,14 +60,14 @@ def _get_weights(dist, weights):
 
     Parameters
     ===========
-    dist: ndarray
+    dist : ndarray
         The input distances
-    weights: {'uniform', 'distance' or a callable}
+    weights : {'uniform', 'distance' or a callable}
         The kind of weighting used
 
     Returns
     ========
-    weights_arr: array of the same shape as ``dist``
+    weights_arr : array of the same shape as ``dist``
         if ``weights == 'uniform'``, then returns None
     """
     if weights in (None, 'uniform'):
@@ -108,16 +108,7 @@ class NeighborsBase(six.with_metaclass(ABCMeta, BaseEstimator)):
 
     def _init_params(self, n_neighbors=None, radius=None,
                      algorithm='auto', leaf_size=30, metric='minkowski',
-                     p=2, metric_params=None, n_jobs=1, **kwargs):
-        if kwargs:
-            warnings.warn("Passing additional arguments to the metric "
-                          "function as **kwargs is deprecated "
-                          "and will no longer be supported in 0.18. "
-                          "Use metric_params instead.",
-                          DeprecationWarning, stacklevel=3)
-            if metric_params is None:
-                metric_params = {}
-            metric_params.update(kwargs)
+                     p=2, metric_params=None, n_jobs=1):
 
         self.n_neighbors = n_neighbors
         self.radius = radius
@@ -592,11 +583,12 @@ class RadiusNeighborsMixin(object):
             # for efficiency, use squared euclidean distances
             if self.effective_metric_ == 'euclidean':
                 dist = pairwise_distances(X, self._fit_X, 'euclidean',
-                                          squared=True)
+                                          n_jobs=self.n_jobs, squared=True)
                 radius *= radius
             else:
                 dist = pairwise_distances(X, self._fit_X,
                                           self.effective_metric_,
+                                          n_jobs=self.n_jobs,
                                           **self.effective_metric_params_)
 
             neigh_ind_list = [np.where(d <= radius)[0] for d in dist]

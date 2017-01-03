@@ -14,8 +14,13 @@ from sklearn.utils.testing import assert_almost_equal
 from sklearn.utils.testing import assert_array_equal
 from sklearn.utils.testing import assert_array_almost_equal
 from sklearn.utils.testing import assert_true
+from sklearn.utils.testing import assert_false
 from sklearn.utils.testing import assert_greater
 from sklearn.utils.testing import assert_raises
+from sklearn.utils.testing import assert_warns
+from sklearn.utils.testing import skip_if_32bit
+from sklearn.utils.testing import SkipTest
+from sklearn.utils.fixes import np_version
 
 from sklearn.utils.extmath import density
 from sklearn.utils.extmath import logsumexp
@@ -30,6 +35,7 @@ from sklearn.utils.extmath import svd_flip
 from sklearn.utils.extmath import _incremental_mean_and_var
 from sklearn.utils.extmath import _deterministic_vector_sign_flip
 from sklearn.utils.extmath import softmax
+from sklearn.utils.extmath import stable_cumsum
 from sklearn.datasets.samples_generator import make_low_rank_matrix
 
 
@@ -57,8 +63,8 @@ def test_uniform_weights():
         mode, score = stats.mode(x, axis)
         mode2, score2 = weighted_mode(x, weights, axis)
 
-        assert_true(np.all(mode == mode2))
-        assert_true(np.all(score == score2))
+        assert_array_equal(mode, mode2)
+        assert_array_equal(score, score2)
 
 
 def test_random_weights():
@@ -108,25 +114,30 @@ def test_randomized_svd_low_rank():
     # compute the singular values of X using the slow exact method
     U, s, V = linalg.svd(X, full_matrices=False)
 
-    # compute the singular values of X using the fast approximate method
-    Ua, sa, Va = randomized_svd(X, k)
-    assert_equal(Ua.shape, (n_samples, k))
-    assert_equal(sa.shape, (k,))
-    assert_equal(Va.shape, (k, n_features))
+    for normalizer in ['auto', 'LU', 'QR']:  # 'none' would not be stable
+        # compute the singular values of X using the fast approximate method
+        Ua, sa, Va = \
+            randomized_svd(X, k, power_iteration_normalizer=normalizer,
+                           random_state=0)
+        assert_equal(Ua.shape, (n_samples, k))
+        assert_equal(sa.shape, (k,))
+        assert_equal(Va.shape, (k, n_features))
 
-    # ensure that the singular values of both methods are equal up to the real
-    # rank of the matrix
-    assert_almost_equal(s[:k], sa)
+        # ensure that the singular values of both methods are equal up to the
+        # real rank of the matrix
+        assert_almost_equal(s[:k], sa)
 
-    # check the singular vectors too (while not checking the sign)
-    assert_almost_equal(np.dot(U[:, :k], V[:k, :]), np.dot(Ua, Va))
+        # check the singular vectors too (while not checking the sign)
+        assert_almost_equal(np.dot(U[:, :k], V[:k, :]), np.dot(Ua, Va))
 
-    # check the sparse matrix representation
-    X = sparse.csr_matrix(X)
+        # check the sparse matrix representation
+        X = sparse.csr_matrix(X)
 
-    # compute the singular values of X using the fast approximate method
-    Ua, sa, Va = randomized_svd(X, k)
-    assert_almost_equal(s[:rank], sa[:rank])
+        # compute the singular values of X using the fast approximate method
+        Ua, sa, Va = \
+            randomized_svd(X, k, power_iteration_normalizer=normalizer,
+                           random_state=0)
+        assert_almost_equal(s[:rank], sa[:rank])
 
 
 def test_norm_squared_norm():
@@ -141,14 +152,23 @@ def test_norm_squared_norm():
 
 def test_row_norms():
     X = np.random.RandomState(42).randn(100, 100)
-    sq_norm = (X ** 2).sum(axis=1)
+    for dtype in (np.float32, np.float64):
+        if dtype is np.float32:
+            precision = 4
+        else:
+            precision = 5
 
-    assert_array_almost_equal(sq_norm, row_norms(X, squared=True), 5)
-    assert_array_almost_equal(np.sqrt(sq_norm), row_norms(X))
+        X = X.astype(dtype)
+        sq_norm = (X ** 2).sum(axis=1)
 
-    Xcsr = sparse.csr_matrix(X, dtype=np.float32)
-    assert_array_almost_equal(sq_norm, row_norms(Xcsr, squared=True), 5)
-    assert_array_almost_equal(np.sqrt(sq_norm), row_norms(Xcsr))
+        assert_array_almost_equal(sq_norm, row_norms(X, squared=True),
+                                  precision)
+        assert_array_almost_equal(np.sqrt(sq_norm), row_norms(X), precision)
+
+        Xcsr = sparse.csr_matrix(X, dtype=dtype)
+        assert_array_almost_equal(sq_norm, row_norms(Xcsr, squared=True),
+                                  precision)
+        assert_array_almost_equal(np.sqrt(sq_norm), row_norms(Xcsr), precision)
 
 
 def test_randomized_svd_low_rank_with_noise():
@@ -161,26 +181,31 @@ def test_randomized_svd_low_rank_with_noise():
     # generate a matrix X wity structure approximate rank `rank` and an
     # important noisy component
     X = make_low_rank_matrix(n_samples=n_samples, n_features=n_features,
-                             effective_rank=rank, tail_strength=0.5,
+                             effective_rank=rank, tail_strength=0.1,
                              random_state=0)
     assert_equal(X.shape, (n_samples, n_features))
 
     # compute the singular values of X using the slow exact method
     _, s, _ = linalg.svd(X, full_matrices=False)
 
-    # compute the singular values of X using the fast approximate method
-    # without the iterated power method
-    _, sa, _ = randomized_svd(X, k, n_iter=0)
+    for normalizer in ['auto', 'none', 'LU', 'QR']:
+        # compute the singular values of X using the fast approximate
+        # method without the iterated power method
+        _, sa, _ = randomized_svd(X, k, n_iter=0,
+                                  power_iteration_normalizer=normalizer,
+                                  random_state=0)
 
-    # the approximation does not tolerate the noise:
-    assert_greater(np.abs(s[:k] - sa).max(), 0.05)
+        # the approximation does not tolerate the noise:
+        assert_greater(np.abs(s[:k] - sa).max(), 0.01)
 
-    # compute the singular values of X using the fast approximate method with
-    # iterated power method
-    _, sap, _ = randomized_svd(X, k, n_iter=5)
+        # compute the singular values of X using the fast approximate
+        # method with iterated power method
+        _, sap, _ = randomized_svd(X, k,
+                                   power_iteration_normalizer=normalizer,
+                                   random_state=0)
 
-    # the iterated power method is helping getting rid of the noise:
-    assert_almost_equal(s[:k], sap, decimal=3)
+        # the iterated power method is helping getting rid of the noise:
+        assert_almost_equal(s[:k], sap, decimal=3)
 
 
 def test_randomized_svd_infinite_rank():
@@ -199,25 +224,27 @@ def test_randomized_svd_infinite_rank():
 
     # compute the singular values of X using the slow exact method
     _, s, _ = linalg.svd(X, full_matrices=False)
+    for normalizer in ['auto', 'none', 'LU', 'QR']:
+        # compute the singular values of X using the fast approximate method
+        # without the iterated power method
+        _, sa, _ = randomized_svd(X, k, n_iter=0,
+                                  power_iteration_normalizer=normalizer)
 
-    # compute the singular values of X using the fast approximate method
-    # without the iterated power method
-    _, sa, _ = randomized_svd(X, k, n_iter=0)
+        # the approximation does not tolerate the noise:
+        assert_greater(np.abs(s[:k] - sa).max(), 0.1)
 
-    # the approximation does not tolerate the noise:
-    assert_greater(np.abs(s[:k] - sa).max(), 0.1)
+        # compute the singular values of X using the fast approximate method
+        # with iterated power method
+        _, sap, _ = randomized_svd(X, k, n_iter=5,
+                                   power_iteration_normalizer=normalizer)
 
-    # compute the singular values of X using the fast approximate method with
-    # iterated power method
-    _, sap, _ = randomized_svd(X, k, n_iter=5)
-
-    # the iterated power method is still managing to get most of the structure
-    # at the requested rank
-    assert_almost_equal(s[:k], sap, decimal=3)
+        # the iterated power method is still managing to get most of the
+        # structure at the requested rank
+        assert_almost_equal(s[:k], sap, decimal=3)
 
 
 def test_randomized_svd_transpose_consistency():
-    # Check that transposing the design matrix has limit impact
+    # Check that transposing the design matrix has limited impact
     n_samples = 100
     n_features = 500
     rank = 4
@@ -247,6 +274,41 @@ def test_randomized_svd_transpose_consistency():
 
     # in this case 'auto' is equivalent to transpose
     assert_almost_equal(s2, s3)
+
+
+def test_randomized_svd_power_iteration_normalizer():
+    # randomized_svd with power_iteration_normalized='none' diverges for
+    # large number of power iterations on this dataset
+    rng = np.random.RandomState(42)
+    X = make_low_rank_matrix(100, 500, effective_rank=50, random_state=rng)
+    X += 3 * rng.randint(0, 2, size=X.shape)
+    n_components = 50
+
+    # Check that it diverges with many (non-normalized) power iterations
+    U, s, V = randomized_svd(X, n_components, n_iter=2,
+                             power_iteration_normalizer='none')
+    A = X - U.dot(np.diag(s).dot(V))
+    error_2 = linalg.norm(A, ord='fro')
+    U, s, V = randomized_svd(X, n_components, n_iter=20,
+                             power_iteration_normalizer='none')
+    A = X - U.dot(np.diag(s).dot(V))
+    error_20 = linalg.norm(A, ord='fro')
+    assert_greater(np.abs(error_2 - error_20), 100)
+
+    for normalizer in ['LU', 'QR', 'auto']:
+        U, s, V = randomized_svd(X, n_components, n_iter=2,
+                                 power_iteration_normalizer=normalizer,
+                                 random_state=0)
+        A = X - U.dot(np.diag(s).dot(V))
+        error_2 = linalg.norm(A, ord='fro')
+
+        for i in [5, 10, 50]:
+            U, s, V = randomized_svd(X, n_components, n_iter=i,
+                                     power_iteration_normalizer=normalizer,
+                                     random_state=0)
+            A = X - U.dot(np.diag(s).dot(V))
+            error = linalg.norm(A, ord='fro')
+            assert_greater(15, np.abs(error_2 - error))
 
 
 def test_svd_flip():
@@ -286,6 +348,37 @@ def test_randomized_svd_sign_flip():
         assert_almost_equal(np.dot(v2.T, v2), np.eye(2))
 
 
+def test_randomized_svd_sign_flip_with_transpose():
+    # Check if the randomized_svd sign flipping is always done based on u
+    # irrespective of transpose.
+    # See https://github.com/scikit-learn/scikit-learn/issues/5608
+    # for more details.
+    def max_loading_is_positive(u, v):
+        """
+        returns bool tuple indicating if the values maximising np.abs
+        are positive across all rows for u and across all columns for v.
+        """
+        u_based = (np.abs(u).max(axis=0) == u.max(axis=0)).all()
+        v_based = (np.abs(v).max(axis=1) == v.max(axis=1)).all()
+        return u_based, v_based
+
+    mat = np.arange(10 * 8).reshape(10, -1)
+
+    # Without transpose
+    u_flipped, _, v_flipped = randomized_svd(mat, 3, flip_sign=True)
+    u_based, v_based = max_loading_is_positive(u_flipped, v_flipped)
+    assert_true(u_based)
+    assert_false(v_based)
+
+    # With transpose
+    u_flipped_with_transpose, _, v_flipped_with_transpose = randomized_svd(
+        mat, 3, flip_sign=True, transpose=True)
+    u_based, v_based = max_loading_is_positive(
+        u_flipped_with_transpose, v_flipped_with_transpose)
+    assert_true(u_based)
+    assert_false(v_based)
+
+
 def test_cartesian():
     # Check if cartesian product delivers the right results
 
@@ -314,8 +407,8 @@ def test_cartesian():
 
 def test_logistic_sigmoid():
     # Check correctness and robustness of logistic sigmoid implementation
-    naive_logistic = lambda x: 1 / (1 + np.exp(-x))
-    naive_log_logistic = lambda x: np.log(naive_logistic(x))
+    def naive_log_logistic(x):
+        return np.log(1 / (1 + np.exp(-x)))
 
     x = np.linspace(-2, 2, 50)
     assert_array_almost_equal(log_logistic(x), naive_log_logistic(x))
@@ -424,6 +517,7 @@ def test_incremental_variance_update_formulas():
     assert_almost_equal(final_count, A.shape[0])
 
 
+@skip_if_32bit
 def test_incremental_variance_numerical_stability():
     # Test Youngs and Cramer incremental variance formulas.
 
@@ -553,3 +647,17 @@ def test_softmax():
     exp_X = np.exp(X)
     sum_exp_X = np.sum(exp_X, axis=1).reshape((-1, 1))
     assert_array_almost_equal(softmax(X), exp_X / sum_exp_X)
+
+
+def test_stable_cumsum():
+    if np_version < (1, 9):
+        raise SkipTest("Sum is as unstable as cumsum for numpy < 1.9")
+    assert_array_equal(stable_cumsum([1, 2, 3]), np.cumsum([1, 2, 3]))
+    r = np.random.RandomState(0).rand(100000)
+    assert_warns(RuntimeWarning, stable_cumsum, r, rtol=0, atol=0)
+
+    # test axis parameter
+    A = np.random.RandomState(36).randint(1000, size=(5, 5, 5))
+    assert_array_equal(stable_cumsum(A, axis=0), np.cumsum(A, axis=0))
+    assert_array_equal(stable_cumsum(A, axis=1), np.cumsum(A, axis=1))
+    assert_array_equal(stable_cumsum(A, axis=2), np.cumsum(A, axis=2))

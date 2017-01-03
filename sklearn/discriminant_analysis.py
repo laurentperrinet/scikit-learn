@@ -55,7 +55,9 @@ def _cov(X, shrinkage=None):
         if shrinkage == 'auto':
             sc = StandardScaler()  # standardize features
             X = sc.fit_transform(X)
-            s = sc.scale_ * ledoit_wolf(X)[0] * sc.scale_  # scale back
+            s = ledoit_wolf(X)[0]
+            # rescale
+            s = sc.scale_[:, np.newaxis] * s * sc.scale_[np.newaxis, :]
         elif shrinkage == 'empirical':
             s = empirical_covariance(X)
         else:
@@ -139,13 +141,18 @@ class LinearDiscriminantAnalysis(BaseEstimator, LinearClassifierMixin,
     The fitted model can also be used to reduce the dimensionality of the input
     by projecting it to the most discriminative directions.
 
+    .. versionadded:: 0.17
+       *LinearDiscriminantAnalysis*.
+
+    Read more in the :ref:`User Guide <lda_qda>`.
+
     Parameters
     ----------
     solver : string, optional
         Solver to use, possible values:
-          - 'svd': Singular value decomposition (default). Does not compute the
-                covariance matrix, therefore this solver is recommended for
-                data with a large number of features.
+          - 'svd': Singular value decomposition (default).
+            Does not compute the covariance matrix, therefore this solver is
+            recommended for data with a large number of features.
           - 'lsqr': Least squares solution, can be combined with shrinkage.
           - 'eigen': Eigenvalue decomposition, can be combined with shrinkage.
 
@@ -166,8 +173,12 @@ class LinearDiscriminantAnalysis(BaseEstimator, LinearClassifierMixin,
     store_covariance : bool, optional
         Additionally compute class covariance matrix (default False).
 
+        .. versionadded:: 0.17
+
     tol : float, optional
         Threshold used for rank estimation in SVD solver.
+
+        .. versionadded:: 0.17
 
     Attributes
     ----------
@@ -184,7 +195,7 @@ class LinearDiscriminantAnalysis(BaseEstimator, LinearClassifierMixin,
         Percentage of variance explained by each of the selected components.
         If ``n_components`` is not set then all components are stored and the
         sum of explained variances is equal to 1.0. Only available when eigen
-        solver is used.
+        or svd solver is used.
 
     means_ : array-like, shape (n_classes, n_features)
         Class means.
@@ -280,8 +291,8 @@ class LinearDiscriminantAnalysis(BaseEstimator, LinearClassifierMixin,
         self.means_ = _class_means(X, y)
         self.covariance_ = _class_cov(X, y, self.priors_, shrinkage)
         self.coef_ = linalg.lstsq(self.covariance_, self.means_.T)[0].T
-        self.intercept_ = (-0.5 * np.diag(np.dot(self.means_, self.coef_.T))
-                           + np.log(self.priors_))
+        self.intercept_ = (-0.5 * np.diag(np.dot(self.means_, self.coef_.T)) +
+                           np.log(self.priors_))
 
     def _solve_eigen(self, X, y, shrinkage):
         """Eigenvalue solver.
@@ -323,15 +334,16 @@ class LinearDiscriminantAnalysis(BaseEstimator, LinearClassifierMixin,
         Sb = St - Sw  # between scatter
 
         evals, evecs = linalg.eigh(Sb, Sw)
-        self.explained_variance_ratio_ = np.sort(evals / np.sum(evals))[::-1]
+        self.explained_variance_ratio_ = np.sort(evals / np.sum(evals)
+                                                 )[::-1][:self._max_components]
         evecs = evecs[:, np.argsort(evals)[::-1]]  # sort eigenvectors
         # evecs /= np.linalg.norm(evecs, axis=0)  # doesn't work with numpy 1.6
         evecs /= np.apply_along_axis(np.linalg.norm, 0, evecs)
 
         self.scalings_ = evecs
         self.coef_ = np.dot(self.means_, evecs).dot(evecs.T)
-        self.intercept_ = (-0.5 * np.diag(np.dot(self.means_, self.coef_.T))
-                           + np.log(self.priors_))
+        self.intercept_ = (-0.5 * np.diag(np.dot(self.means_, self.coef_.T)) +
+                           np.log(self.priors_))
 
     def _solve_svd(self, X, y):
         """SVD solver.
@@ -386,17 +398,25 @@ class LinearDiscriminantAnalysis(BaseEstimator, LinearClassifierMixin,
         # (n_classes) centers
         _, S, V = linalg.svd(X, full_matrices=0)
 
+        self.explained_variance_ratio_ = (S**2 / np.sum(
+            S**2))[:self._max_components]
         rank = np.sum(S > self.tol * S[0])
         self.scalings_ = np.dot(scalings, V.T[:, :rank])
         coef = np.dot(self.means_ - self.xbar_, self.scalings_)
-        self.intercept_ = (-0.5 * np.sum(coef ** 2, axis=1)
-                           + np.log(self.priors_))
+        self.intercept_ = (-0.5 * np.sum(coef ** 2, axis=1) +
+                           np.log(self.priors_))
         self.coef_ = np.dot(coef, self.scalings_.T)
         self.intercept_ -= np.dot(self.xbar_, self.coef_.T)
 
-    def fit(self, X, y, store_covariance=None, tol=None):
+    def fit(self, X, y):
         """Fit LinearDiscriminantAnalysis model according to the given
            training data and parameters.
+
+           .. versionchanged:: 0.19
+              *store_covariance* has been moved to main constructor.
+
+           .. versionchanged:: 0.19
+              *tol* has been moved to main constructor.
 
         Parameters
         ----------
@@ -406,20 +426,6 @@ class LinearDiscriminantAnalysis(BaseEstimator, LinearClassifierMixin,
         y : array, shape (n_samples,)
             Target values.
         """
-        if store_covariance:
-            warnings.warn("The parameter 'store_covariance' is deprecated as "
-                          "of version 0.17 and will be removed in 0.19. The "
-                          "parameter is no longer necessary because the value "
-                          "is set via the estimator initialisation or "
-                          "set_params method.", DeprecationWarning)
-            self.store_covariance = store_covariance
-        if tol:
-            warnings.warn("The parameter 'tol' is deprecated as of version "
-                          "0.17 and will be removed in 0.19. The parameter is "
-                          "no longer necessary because the value is set via "
-                          "the estimator initialisation or set_params method.",
-                          DeprecationWarning)
-            self.tol = tol
         X, y = check_X_y(X, y, ensure_min_samples=2, estimator=self)
         self.classes_ = unique_labels(y)
 
@@ -435,6 +441,13 @@ class LinearDiscriminantAnalysis(BaseEstimator, LinearClassifierMixin,
             warnings.warn("The priors do not sum to 1. Renormalizing",
                           UserWarning)
             self.priors_ = self.priors_ / self.priors_.sum()
+
+        # Get the maximum number of components
+        if self.n_components is None:
+            self._max_components = len(self.classes_) - 1
+        else:
+            self._max_components = min(len(self.classes_) - 1,
+                                       self.n_components)
 
         if self.solver == 'svd':
             if self.shrinkage is not None:
@@ -476,9 +489,8 @@ class LinearDiscriminantAnalysis(BaseEstimator, LinearClassifierMixin,
             X_new = np.dot(X - self.xbar_, self.scalings_)
         elif self.solver == 'eigen':
             X_new = np.dot(X, self.scalings_)
-        n_components = X.shape[1] if self.n_components is None \
-            else self.n_components
-        return X_new[:, :n_components]
+
+        return X_new[:, :self._max_components]
 
     def predict_proba(self, X):
         """Estimate probability.
@@ -522,14 +534,18 @@ class LinearDiscriminantAnalysis(BaseEstimator, LinearClassifierMixin,
 
 
 class QuadraticDiscriminantAnalysis(BaseEstimator, ClassifierMixin):
-    """
-    Quadratic Discriminant Analysis
+    """Quadratic Discriminant Analysis
 
     A classifier with a quadratic decision boundary, generated
     by fitting class conditional densities to the data
     and using Bayes' rule.
 
     The model fits a Gaussian density to each class.
+
+    .. versionadded:: 0.17
+       *QuadraticDiscriminantAnalysis*
+
+    Read more in the :ref:`User Guide <lda_qda>`.
 
     Parameters
     ----------
@@ -566,8 +582,12 @@ class QuadraticDiscriminantAnalysis(BaseEstimator, ClassifierMixin):
         If True the covariance matrices are computed and stored in the
         `self.covariances_` attribute.
 
+        .. versionadded:: 0.17
+
     tol : float, optional, default 1.0e-4
         Threshold used for rank estimation.
+
+        .. versionadded:: 0.17
 
     Examples
     --------
@@ -596,8 +616,14 @@ class QuadraticDiscriminantAnalysis(BaseEstimator, ClassifierMixin):
         self.store_covariances = store_covariances
         self.tol = tol
 
-    def fit(self, X, y, store_covariances=None, tol=None):
+    def fit(self, X, y):
         """Fit the model according to the given training data and parameters.
+
+            .. versionchanged:: 0.19
+               *store_covariance* has been moved to main constructor.
+
+            .. versionchanged:: 0.19
+               *tol* has been moved to main constructor.
 
         Parameters
         ----------
@@ -608,20 +634,6 @@ class QuadraticDiscriminantAnalysis(BaseEstimator, ClassifierMixin):
         y : array, shape = [n_samples]
             Target values (integers)
         """
-        if store_covariances:
-            warnings.warn("The parameter 'store_covariances' is deprecated as "
-                          "of version 0.17 and will be removed in 0.19. The "
-                          "parameter is no longer necessary because the value "
-                          "is set via the estimator initialisation or "
-                          "set_params method.", DeprecationWarning)
-            self.store_covariances = store_covariances
-        if tol:
-            warnings.warn("The parameter 'tol' is deprecated as of version "
-                          "0.17 and will be removed in 0.19. The parameter is "
-                          "no longer necessary because the value is set via "
-                          "the estimator initialisation or set_params method.",
-                          DeprecationWarning)
-            self.tol = tol
         X, y = check_X_y(X, y)
         check_classification_targets(y)
         self.classes_, y = np.unique(y, return_inverse=True)

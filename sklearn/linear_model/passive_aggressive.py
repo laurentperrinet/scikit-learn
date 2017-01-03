@@ -59,6 +59,18 @@ class PassiveAggressiveClassifier(BaseSGDClassifier):
         weights inversely proportional to class frequencies in the input data
         as ``n_samples / (n_classes * np.bincount(y))``
 
+        .. versionadded:: 0.17
+           parameter *class_weight* to automatically weight samples.
+
+    average : bool or int, optional
+        When set to True, computes the averaged SGD weights and stores the
+        result in the ``coef_`` attribute. If set to an int greater than 1,
+        averaging will begin once the total number of samples seen reaches
+        average. So average=10 will begin averaging after seeing 10 samples.
+
+        .. versionadded:: 0.19
+           parameter *average* to use weights averaging in SGD
+
     Attributes
     ----------
     coef_ : array, shape = [1, n_features] if n_classes == 2 else [n_classes,\
@@ -81,20 +93,22 @@ class PassiveAggressiveClassifier(BaseSGDClassifier):
     K. Crammer, O. Dekel, J. Keshat, S. Shalev-Shwartz, Y. Singer - JMLR (2006)
 
     """
+
     def __init__(self, C=1.0, fit_intercept=True, n_iter=5, shuffle=True,
                  verbose=0, loss="hinge", n_jobs=1, random_state=None,
-                 warm_start=False, class_weight=None):
-        BaseSGDClassifier.__init__(self,
-                                   penalty=None,
-                                   fit_intercept=fit_intercept,
-                                   n_iter=n_iter,
-                                   shuffle=shuffle,
-                                   verbose=verbose,
-                                   random_state=random_state,
-                                   eta0=1.0,
-                                   warm_start=warm_start,
-                                   class_weight=class_weight,
-                                   n_jobs=n_jobs)
+                 warm_start=False, class_weight=None, average=False):
+        super(PassiveAggressiveClassifier, self).__init__(
+            penalty=None,
+            fit_intercept=fit_intercept,
+            n_iter=n_iter,
+            shuffle=shuffle,
+            verbose=verbose,
+            random_state=random_state,
+            eta0=1.0,
+            warm_start=warm_start,
+            class_weight=class_weight,
+            average=average,
+            n_jobs=n_jobs)
         self.C = C
         self.loss = loss
 
@@ -207,6 +221,15 @@ class PassiveAggressiveRegressor(BaseSGDRegressor):
         When set to True, reuse the solution of the previous call to fit as
         initialization, otherwise, just erase the previous solution.
 
+    average : bool or int, optional
+        When set to True, computes the averaged SGD weights and stores the
+        result in the ``coef_`` attribute. If set to an int greater than 1,
+        averaging will begin once the total number of samples seen reaches
+        average. So average=10 will begin averaging after seeing 10 samples.
+
+        .. versionadded:: 0.19
+           parameter *average* to use weights averaging in SGD
+
     Attributes
     ----------
     coef_ : array, shape = [1, n_features] if n_classes == 2 else [n_classes,\
@@ -230,18 +253,20 @@ class PassiveAggressiveRegressor(BaseSGDRegressor):
     """
     def __init__(self, C=1.0, fit_intercept=True, n_iter=5, shuffle=True,
                  verbose=0, loss="epsilon_insensitive",
-                 epsilon=DEFAULT_EPSILON, random_state=None, warm_start=False):
-        BaseSGDRegressor.__init__(self,
-                                  penalty=None,
-                                  l1_ratio=0,
-                                  epsilon=epsilon,
-                                  eta0=1.0,
-                                  fit_intercept=fit_intercept,
-                                  n_iter=n_iter,
-                                  shuffle=shuffle,
-                                  verbose=verbose,
-                                  random_state=random_state,
-                                  warm_start=warm_start)
+                 epsilon=DEFAULT_EPSILON, random_state=None, warm_start=False,
+                 average=False):
+        super(PassiveAggressiveRegressor, self).__init__(
+            penalty=None,
+            l1_ratio=0,
+            epsilon=epsilon,
+            eta0=1.0,
+            fit_intercept=fit_intercept,
+            n_iter=n_iter,
+            shuffle=shuffle,
+            verbose=verbose,
+            random_state=random_state,
+            warm_start=warm_start,
+            average=average)
         self.C = C
         self.loss = loss
 
